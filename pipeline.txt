@@ -1,11 +1,12 @@
 pipeline{
     agent any
     tools{
-        jdk 'jdk17'
+        jdk 'jdk11'
         nodejs 'node16'
+        maven 'maven'
     }
     environment {
-        SCANNER_HOME=tool 'sonar-scanner'
+        SCANNER_HOME=tool 'sonar5'
     }
     stages {
         stage('clean workspace'){
@@ -20,16 +21,19 @@ pipeline{
         }
         stage("Sonarqube Analysis "){
             steps{
-                withSonarQubeEnv('sonar-server') {
-                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Netflix \
-                    -Dsonar.projectKey=Netflix '''
+                withSonarQubeEnv('sonar') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner \
+  -Dsonar.projectKey=netflix \
+  -Dsonar.sources=. \
+  -Dsonar.host.url=http://54.82.238.235:9000 \
+  -Dsonar.login=5ceb4fd1306845b28f85c1846be37ca346089596 '''
                 }
             }
         }
         stage("quality gate"){
            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonarqube' 
                 }
             } 
         }
@@ -91,7 +95,7 @@ pipeline{
             body: "Project: ${env.JOB_NAME}<br/>" +
                 "Build Number: ${env.BUILD_NUMBER}<br/>" +
                 "URL: ${env.BUILD_URL}<br/>",
-            to: 'iambatmanthegoat@gmail.com',                                #change mail here
+            to: 'alexa.oreo234@gmail.com',
             attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
         }
     }
