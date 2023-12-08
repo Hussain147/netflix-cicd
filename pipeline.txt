@@ -9,6 +9,7 @@ pipeline{
         SCANNER_HOME=tool 'sonar5'
         BUILD_NUMBER = "${currentBuild.number}"
         dockerImageVersion = "v${BUILD_NUMBER}"
+        SONAR_TOKEN = credentials('sonar-token')
     }
     stages {
         stage('clean workspace'){
@@ -27,21 +28,29 @@ pipeline{
                     sh ''' $SCANNER_HOME/bin/sonar-scanner \
   -Dsonar.projectKey=netflix \
   -Dsonar.sources=. \
-  -Dsonar.host.url=http://54.82.238.235:9000 \
-  -Dsonar.login=5ceb4fd1306845b28f85c1846be37ca346089596 '''
+  -Dsonar.host.url=http://3.85.232.136:9000 \
+  -Dsonar.login=sqp_3413274a51c135e9b461025275e362afbedbc4ca '''
                 }
             }
         }
         stage("quality gate"){
-           steps {
+          steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonarqube' 
+                    
+
+                    // Check the quality gate status
+                    def qualityGateStatus = waitForQualityGate()
+
+                    // Fail the build if the quality gate is not passed
+                    if (qualityGateStatus != 'OK') {
+                        error "Quality gate failed! Check the analysis tool for details."
+                    }
                 }
             } 
         }
         stage('Install Dependencies') {
             steps {
-                sh "npm install"
+                sh 'npm install'
             }
         }
         stage('OWASP FS SCAN') {
@@ -58,8 +67,8 @@ pipeline{
         stage("Docker Build & Push"){
             steps{
                 script{
-                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
-                       sh "docker build --build-arg TMDB_V3_API_KEY=<yourtmdbapikey> -t netflix ."
+                   withDockerRegistry(credentialsId: 'docker-login', toolName: 'docker'){   
+                       sh "docker build --build-arg TMDB_V3_API_KEY=19c967a246a4896449b52845434f63df -t netflix ."
                        sh "docker tag netflix kubehussain/netflix:$dockerImageVersion"
                        sh "docker push kubehussain/netflix:$dockerImageVersion"
                     }
@@ -96,7 +105,7 @@ pipeline{
 
                 // Clone the repository
                         sh "git clone https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} ${cloneDirectory}"
-                        dir("${cloneDirectory}/spring-boot-app-manifests") {
+                        dir("${cloneDirectory}/Kubernetes") {
                     // Fetch the current Deployment YAML
                             sh "wget https://raw.githubusercontent.com/${GIT_USER_NAME}/${GIT_REPO_NAME}/main/Kubernetes/deployment.yml"
 
