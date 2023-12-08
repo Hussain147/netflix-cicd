@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
       - name: netflix-app
-        image: kubehussain/netflix:latest
+        image: kubehussain/netflix:v17
         ports:
         - containerPort: 80
