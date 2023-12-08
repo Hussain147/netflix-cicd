@@ -7,6 +7,8 @@ pipeline{
     }
     environment {
         SCANNER_HOME=tool 'sonar5'
+        BUILD_NUMBER = "${currentBuild.number}"
+        dockerImageVersion = "v${BUILD_NUMBER}"
     }
     stages {
         stage('clean workspace'){
@@ -58,34 +60,58 @@ pipeline{
                 script{
                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
                        sh "docker build --build-arg TMDB_V3_API_KEY=<yourtmdbapikey> -t netflix ."
-                       sh "docker tag netflix kubehussain/netflix:latest "
-                       sh "docker push kubehussain/netflix:latest "
+                       sh "docker tag netflix kubehussain/netflix:$dockerImageVersion"
+                       sh "docker push kubehussain/netflix:$dockerImageVersion"
                     }
                 }
             }
         }
         stage("TRIVY"){
             steps{
-                sh "trivy image kubehussain/netflix:latest > trivyimage.txt" 
+                sh "trivy image kubehussain/netflix:$dockerImageVersion > trivyimage.txt" 
             }
         }
         stage('Deploy to container'){
             steps{
-                sh 'docker run -d -p 8081:80 kubehussain/netflix:latest'
+                sh 'docker run -d -p 8081:80 kubehussain/netflix:$dockerImageVersion'
             }
         }
-        stage('Deploy to kubernets'){
-            steps{
-                script{
-                    dir('Kubernetes') {
-                        withKubeConfig(caCertificate: '', clusterName: '', contextName: '', credentialsId: 'k8s', namespace: '', restrictKubeConfigAccess: false, serverUrl: '') {
-                                sh 'kubectl apply -f deployment.yml'
-                                sh 'kubectl apply -f service.yml'
-                        }   
-                    }
+        stage('GitOps Enabler to update deployment manifest') {
+            environment {
+                GIT_REPO_NAME = "netflix-cicd"
+                GIT_USER_NAME = "hussain147"
+                GIT_USER_EMAIL = "hussainashrafi406@gmail.com"
+
+            
+        }
+            steps {
+                withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                    script {
+
+                // Specify the target directory for the clone
+                        def cloneDirectory = "netflix-cicd"
+
+                // Remove the existing directory if it exists
+                        sh "rm -rf ${cloneDirectory}"
+
+                // Clone the repository
+                        sh "git clone https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} ${cloneDirectory}"
+                        dir("${cloneDirectory}/spring-boot-app-manifests") {
+                    // Fetch the current Deployment YAML
+                            sh "wget https://raw.githubusercontent.com/${GIT_USER_NAME}/${GIT_REPO_NAME}/main/Kubernetes/deployment.yml"
+
+                    // Modify the image tag in the Deployment YAML
+                            sh "sed -i 's|kubehussain/netflix:.*|kubehussain/netflix:${dockerImageVersion}|g' deployment.yml"
+
+                    // Add, commit, and push the changes
+                            sh "git add deployment.yml"
+                            sh "git commit -m 'Updated deployment image to version ${dockerImageVersion}'"
+                            sh "git push origin main"
                 }
             }
         }
+    }
+    }
 
     }
     post {
